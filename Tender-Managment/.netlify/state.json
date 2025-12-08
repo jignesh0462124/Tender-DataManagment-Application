@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "env": {
+    "VITE_SUPABASE_URL": {
+      "description": "Supabase project URL",
+      "required": true
+    },
+    "VITE_SUPABASE_KEY": {
+      "description": "Supabase public API key",
+      "required": true
+    }
+  }
+}
