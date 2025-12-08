@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../supabase/supabase"; // adjust path if needed
+import { supabase } from "../../Supabase/supabase"; // adjust path if needed
 import { useNavigate } from "react-router-dom";
 
 // Helper: map Supabase user -> UI-friendly user object

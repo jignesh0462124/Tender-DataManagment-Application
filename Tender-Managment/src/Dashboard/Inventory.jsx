@@ -1,6 +1,6 @@
 // src/pages/Inventory.jsx
 import React, { useState } from "react";
-import { supabase } from "../../supabase/supabase"; // adjust if needed
+import { supabase } from "../../Supabase/supabase"; // adjust if needed
 import { Link } from "react-router-dom";
 
 const BUCKET_NAME = "inventory-files"; // make sure this bucket exists

@@ -1,7 +1,7 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../../supabase/supabase"; // adjust path if needed
+import { supabase } from "../../Supabase/supabase"; // adjust path if needed
 import { getUserData } from "./User"; // same folder as this file
 
 const Dashboard = () => {
