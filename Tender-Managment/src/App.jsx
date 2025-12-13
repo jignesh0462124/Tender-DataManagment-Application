@@ -1,9 +1,11 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import Landing from './Home/Landing'
-import './App.css'
-import Login from './Login/Login'
-import Dashboard from './Dashboard/Dashboard'
+// src/App.jsx
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Landing from "./Home/Landing";
+import "./App.css";
+import Login from "./Login/Login";
+import Dashboard from "./Dashboard/Dashboard";
 import Inventory from "./Dashboard/Inventory";
+import RequireAuth from "./Login/RequireAuth";
 
 function App() {
   return (
@@ -11,11 +13,28 @@ function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="login" element={<Login />} />
-         <Route path="dashboard" element={<Dashboard />} />
-         <Route path="inventory" element={<Inventory />} />
+
+        {/* Protected routes — user must be authenticated */}
+        <Route
+          path="dashboard"
+          element={
+            <RequireAuth>
+              <Dashboard />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="inventory"
+          element={
+            <RequireAuth>
+              <Inventory />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </Router>
-  )
+  );
 }
 
-export default App
+export default App;

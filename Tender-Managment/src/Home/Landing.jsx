@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   CheckCircle, 
   Database, 
@@ -43,7 +44,7 @@ const Navbar = () => {
       </div>
 
       <div className="hidden md:flex items-center gap-4">
-        <button className="text-white text-sm font-medium hover:text-emerald-400 transition">Login</button>
+        <Link to="/login" className="text-white text-sm font-medium hover:text-emerald-400 transition">Login</Link>
       </div>
 
       {/* Mobile Menu Toggle */}
@@ -58,7 +59,7 @@ const Navbar = () => {
             <a href="#datastore" className="text-slate-300 hover:text-emerald-400">Data Store</a>
             <a href="#howitworks" className="text-slate-300 hover:text-emerald-400">How It Works</a>
             <a href="#pricing" className="text-slate-300 hover:text-emerald-400">Pricing</a>
-            <button className="text-white font-medium text-left">Login</button>
+            <Link to="/login" className="text-white font-medium text-left" onClick={() => setIsOpen(false)}>Login</Link>
             <button className="bg-emerald-500 text-white px-5 py-2 rounded-full font-semibold">Get Started</button>
         </div>
       )}
