@@ -17,22 +17,30 @@ import {
   ArrowDownLeft,
   FileText,
   Image as ImageIcon,
-  MoreVertical,
+  Edit2,
   Trash2,
-  Edit2
+  ChevronDown,
+  MapPin,
+  Truck
 } from "lucide-react";
 
 // Constants
 const BUCKET_NAME = "inventory-files";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const HISTORY_LIMIT = 20; // Increased limit for better visibility
+const ITEMS_PER_PAGE = 20; 
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [user, setUser] = useState({ name: "Guest", role: "Viewer", avatar: "" });
+  
+  // Data States
   const [historyData, setHistoryData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  
   const [error, setError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,13 +56,11 @@ export default function Dashboard() {
   const realtimeChannelRef = useRef(null);
 
   useEffect(() => {
-    loadDashboard();
+    loadInitialData();
     setupRealtime();
     return () => teardownRealtime();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filter data when search term changes
   useEffect(() => {
     if (!searchTerm) {
       setFilteredData(historyData);
@@ -65,29 +71,33 @@ export default function Dashboard() {
           (item) =>
             item.material_name?.toLowerCase().includes(lower) ||
             item.issuer_dispatcher?.toLowerCase().includes(lower) ||
+            item.vehicle_number?.toLowerCase().includes(lower) ||
             String(item.id).includes(lower)
         )
       );
     }
   }, [searchTerm, historyData]);
 
-  async function loadDashboard() {
+  async function loadInitialData() {
     try {
       setLoading(true);
       setError("");
+      
       const userData = await getUserData();
       if (userData) setUser(userData);
 
+      // Fetches ALL columns (id, size_spec, vehicle_number, etc.) matching your JSON
       const { data, error: fetchError } = await supabase
         .from("inventory_logs")
-        .select("*") // fetching all columns for edit
-        .order("created_at", { ascending: false })
-        .limit(HISTORY_LIMIT);
+        .select("*")
+        .order("id", { ascending: false }) 
+        .range(0, ITEMS_PER_PAGE - 1);
 
       if (fetchError) throw fetchError;
       
       setHistoryData(data || []);
-      setFilteredData(data || []);
+      setPage(1);
+      setHasMore(data.length === ITEMS_PER_PAGE);
     } catch (err) {
       console.error("Dashboard error:", err);
       setError("Failed to load dashboard data.");
@@ -96,12 +106,44 @@ export default function Dashboard() {
     }
   }
 
+  const loadMoreData = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    try {
+      setLoadingMore(true);
+      const from = page * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
+      const { data, error } = await supabase
+        .from("inventory_logs")
+        .select("*")
+        .order("id", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      if (data.length > 0) {
+        setHistoryData((prev) => [...prev, ...data]);
+        setPage((prev) => prev + 1);
+      }
+      
+      if (data.length < ITEMS_PER_PAGE) {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error("Load more error:", err);
+      alert("Could not load more data.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   function setupRealtime() {
     if (realtimeChannelRef.current) return;
     const channel = supabase
       .channel("public:inventory_logs")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "inventory_logs" }, (payload) => {
-        setHistoryData((prev) => [payload.new, ...prev].slice(0, HISTORY_LIMIT));
+        setHistoryData((prev) => [payload.new, ...prev]);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "inventory_logs" }, (payload) => {
         setHistoryData((prev) => prev.map((r) => (r.id === payload.new.id ? payload.new : r)));
@@ -126,7 +168,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (row) => {
-    if (!window.confirm(`Are you sure you want to delete ${row.material_name}?`)) return;
+    if (!window.confirm(`Are you sure you want to delete ID #${row.id} (${row.material_name})?`)) return;
     try {
       const { error } = await supabase.from("inventory_logs").delete().eq("id", row.id);
       if (error) throw error;
@@ -136,7 +178,7 @@ export default function Dashboard() {
     }
   };
 
-  // --- File Upload & Modal Logic ---
+  // --- Modal Logic ---
   const openEdit = (row) => {
     setModalError("");
     setReceiptFile(null);
@@ -176,7 +218,7 @@ export default function Dashboard() {
           ...editingRow,
           receipt_url,
           photo_urls,
-          quantity: Number(editingRow.quantity), // Ensure number
+          quantity: Number(editingRow.quantity),
         })
         .eq("id", editingRow.id)
         .select()
@@ -195,9 +237,7 @@ export default function Dashboard() {
 
   const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-  // --- UI Components ---
-
-  // Sidebar Component
+  // --- Sidebar ---
   const Sidebar = ({ mobile }) => (
     <div className={`bg-white border-r border-gray-200 flex flex-col h-full ${mobile ? "w-64" : "w-64 hidden md:flex"}`}>
       <div className="px-6 py-6 border-b border-gray-200 flex items-center gap-3">
@@ -245,10 +285,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      {/* Desktop Sidebar */}
       <Sidebar />
-
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)}></div>
@@ -261,9 +298,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-8 shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
@@ -281,11 +316,10 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Scrollable Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-6xl mx-auto space-y-6">
             
-            {/* Stats Overview */}
+            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                  <p className="text-xs text-gray-500 font-medium uppercase">Recent Activity</p>
@@ -311,22 +345,21 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Main Data Section */}
+            {/* Main Table */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
-              {/* Toolbar */}
               <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                   <input 
                     type="text" 
-                    placeholder="Search material, ID..." 
+                    placeholder="Search material, ID, vehicle..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                   />
                 </div>
                 <button 
-                  onClick={loadDashboard}
+                  onClick={loadInitialData}
                   className="flex items-center justify-center gap-2 px-3 py-2 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition"
                 >
                   <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> 
@@ -334,7 +367,6 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {/* Table (Desktop) & Cards (Mobile) */}
               <div className="min-h-[300px]">
                 {loading ? (
                   <div className="p-8 space-y-4">
@@ -351,10 +383,11 @@ export default function Dashboard() {
                     <table className="hidden md:table w-full text-left text-sm">
                       <thead className="bg-gray-50/50 text-gray-500 font-medium border-b border-gray-100">
                         <tr>
+                          <th className="px-6 py-3 w-16">ID</th>
                           <th className="px-6 py-3">Type</th>
-                          <th className="px-6 py-3">Material</th>
+                          <th className="px-6 py-3">Material & Size</th>
+                          <th className="px-6 py-3">Logistics</th>
                           <th className="px-6 py-3">Qty</th>
-                          <th className="px-6 py-3">Issuer/To</th>
                           <th className="px-6 py-3">Date</th>
                           <th className="px-6 py-3 text-right">Actions</th>
                         </tr>
@@ -362,6 +395,7 @@ export default function Dashboard() {
                       <tbody className="divide-y divide-gray-100">
                         {filteredData.map((item) => (
                           <tr key={item.id} className="hover:bg-gray-50/80 transition group">
+                            <td className="px-6 py-3 text-gray-400 font-mono text-xs">#{item.id}</td>
                             <td className="px-6 py-3">
                               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                                 item.movement_type === "IN" ? "bg-emerald-50 text-emerald-700" : "bg-orange-50 text-orange-700"
@@ -370,9 +404,25 @@ export default function Dashboard() {
                                 {item.movement_type}
                               </span>
                             </td>
-                            <td className="px-6 py-3 font-medium text-gray-900">{item.material_name}</td>
-                            <td className="px-6 py-3 text-gray-600">{item.quantity} {item.unit}</td>
-                            <td className="px-6 py-3 text-gray-500 max-w-[150px] truncate">{item.issuer_dispatcher || "-"}</td>
+                            <td className="px-6 py-3">
+                              <p className="font-medium text-gray-900">{item.material_name}</p>
+                              {item.size_spec && <p className="text-xs text-gray-500 mt-0.5">{item.size_spec}</p>}
+                            </td>
+                            <td className="px-6 py-3 text-gray-600">
+                                <div className="flex flex-col gap-1 text-xs">
+                                    <div className="flex items-center gap-1.5" title="Location">
+                                        <MapPin size={12} className="text-gray-400"/>
+                                        <span className="truncate max-w-[120px]">{item.movement_type === "IN" ? item.source_location : item.destination_location || "-"}</span>
+                                    </div>
+                                    {(item.vehicle_number || item.driver_name) && (
+                                        <div className="flex items-center gap-1.5" title="Transport">
+                                            <Truck size={12} className="text-gray-400"/>
+                                            <span>{item.vehicle_number} {item.driver_name ? `(${item.driver_name})` : ""}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </td>
+                            <td className="px-6 py-3 text-gray-600 font-medium">{item.quantity} {item.unit}</td>
                             <td className="px-6 py-3 text-gray-400 text-xs">{formatDate(item.created_at)}</td>
                             <td className="px-6 py-3 text-right">
                               <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -385,7 +435,7 @@ export default function Dashboard() {
                       </tbody>
                     </table>
 
-                    {/* Mobile View (Cards) */}
+                    {/* Mobile View */}
                     <div className="md:hidden divide-y divide-gray-100">
                       {filteredData.map((item) => (
                         <div key={item.id} className="p-4 space-y-3">
@@ -395,8 +445,12 @@ export default function Dashboard() {
                                     {item.movement_type === "IN" ? <ArrowDownLeft size={18}/> : <ArrowUpRight size={18}/>}
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-gray-900">{item.material_name}</h4>
-                                    <p className="text-sm text-gray-500">{item.quantity} {item.unit} • {formatDate(item.created_at)}</p>
+                                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                                      {item.material_name}
+                                      <span className="text-xs font-mono text-gray-400 font-normal">#{item.id}</span>
+                                    </h4>
+                                    {item.size_spec && <p className="text-xs text-gray-500">{item.size_spec}</p>}
+                                    <p className="text-sm font-medium text-gray-800 mt-1">{item.quantity} {item.unit}</p>
                                 </div>
                             </div>
                             <div className="flex gap-1">
@@ -407,12 +461,16 @@ export default function Dashboard() {
                           
                           <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
                              <div>
-                                <span className="block text-gray-400">Issuer/Dispatcher</span>
-                                {item.issuer_dispatcher || "N/A"}
+                                <span className="block text-gray-400 text-[10px] uppercase font-bold">Location</span>
+                                {item.movement_type === "IN" ? item.source_location : item.destination_location || "-"}
                              </div>
                              <div>
-                                <span className="block text-gray-400">Destination/Stock</span>
-                                {item.destination_location || item.stock_location || "N/A"}
+                                <span className="block text-gray-400 text-[10px] uppercase font-bold">Transport</span>
+                                {item.vehicle_number || "-"}
+                                {item.driver_name && <span className="block text-gray-400 text-[10px]">{item.driver_name}</span>}
+                             </div>
+                             <div className="col-span-2 pt-1 border-t border-gray-100">
+                                <span className="text-[10px] text-gray-400 block">{formatDate(item.created_at)}</span>
                              </div>
                           </div>
 
@@ -431,6 +489,27 @@ export default function Dashboard() {
                         </div>
                       ))}
                     </div>
+
+                    {/* LOAD MORE BUTTON */}
+                    {hasMore && !searchTerm && (
+                      <div className="p-4 border-t border-gray-100 text-center">
+                        <button 
+                          onClick={loadMoreData}
+                          disabled={loadingMore}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {loadingMore ? (
+                            <>
+                              <RefreshCw size={14} className="animate-spin" /> Loading...
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown size={14} /> Load Previous Data
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -444,7 +523,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
-               <h3 className="font-bold text-gray-800">Edit Inventory Record</h3>
+               <h3 className="font-bold text-gray-800">Edit Inventory Record <span className="ml-2 text-sm text-gray-400 font-normal">#{editingRow.id}</span></h3>
                <button onClick={() => setEditingRow(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
             </div>
             
