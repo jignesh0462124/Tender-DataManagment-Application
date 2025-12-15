@@ -6,7 +6,7 @@ import Login from "./Login/Login";
 import Dashboard from "./Dashboard/Dashboard";
 import Inventory from "./Dashboard/Inventory";
 import RequireAuth from "./Login/RequireAuth";
-
+import InventoryList from './Dashboard/InventoryList';
 function App() {
   return (
     <Router>
@@ -20,6 +20,15 @@ function App() {
           element={
             <RequireAuth>
               <Dashboard />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="inventory-list"
+          element={
+            <RequireAuth>
+              <InventoryList />
             </RequireAuth>
           }
         />

@@ -1,7 +1,26 @@
 // src/Dashboard/Inventory.jsx
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { supabase } from "../../Supabase/supabase";
 import { Link } from "react-router-dom";
+import { 
+  Package, 
+  Calendar, 
+  Truck, 
+  MapPin, 
+  User, 
+  Phone, 
+  FileText, 
+  UploadCloud, 
+  Save, 
+  ArrowLeft, 
+  DollarSign, 
+  Info,
+  Layers,
+  Map,
+  X,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
 
 const BUCKET_NAME = "inventory-files";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -9,6 +28,10 @@ const ALLOWED_RECEIPT_TYPES = ["image/jpeg", "image/png", "image/webp", "applica
 const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const Inventory = () => {
+  // Refs for clearing file inputs manually
+  const receiptInputRef = useRef(null);
+  const photosInputRef = useRef(null);
+
   const [form, setForm] = useState({
     movement_type: "IN",
     transaction_date: "",
@@ -27,11 +50,15 @@ const Inventory = () => {
     remarks: "",
     purchase_price: "",
   });
+
   const [receiptFile, setReceiptFile] = useState(null);
   const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoPreviews, setPhotoPreviews] = useState([]); // For image thumbnails
+  
   const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [status, setStatus] = useState({ type: "", msg: "" }); // Unified status state
+
+  // --- Handlers ---
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -50,54 +77,74 @@ const Inventory = () => {
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setErrorMsg("Receipt file too large (max 10MB).");
+      setStatus({ type: "error", msg: "Receipt file too large (max 10MB)." });
       e.target.value = "";
       return;
     }
     if (!ALLOWED_RECEIPT_TYPES.includes(file.type)) {
-      setErrorMsg("Receipt file type not allowed. Use JPEG/PNG/WebP/PDF.");
+      setStatus({ type: "error", msg: "Invalid file type. Use JPEG/PNG/PDF." });
       e.target.value = "";
       return;
     }
     setReceiptFile(file);
-    setErrorMsg("");
+    setStatus({ type: "", msg: "" });
   };
 
   const handlePhotosChange = (e) => {
     const files = Array.from(e.target.files || []);
+    const validFiles = [];
+    const newPreviews = [];
+
     for (let f of files) {
       if (f.size > MAX_FILE_SIZE) {
-        setErrorMsg(`Photo "${f.name}" too large (max 10MB).`);
-        e.target.value = "";
+        setStatus({ type: "error", msg: `Photo "${f.name}" too large.` });
         return;
       }
       if (!ALLOWED_PHOTO_TYPES.includes(f.type)) {
-        setErrorMsg(`Photo "${f.name}" type not allowed.`);
-        e.target.value = "";
+        setStatus({ type: "error", msg: `Photo "${f.name}" type not allowed.` });
         return;
       }
+      validFiles.push(f);
+      newPreviews.push(URL.createObjectURL(f));
     }
-    setPhotoFiles(files);
-    setErrorMsg("");
+
+    setPhotoFiles(validFiles);
+    setPhotoPreviews(newPreviews);
+    setStatus({ type: "", msg: "" });
   };
 
-  const uploadFileToStorage = async (file, isReceipt = false) => {
+  // Helper: Get Current Location
+  const handleGetLocation = (fieldName) => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`;
+        setForm((prev) => ({ ...prev, [fieldName]: coords }));
+      },
+      () => {
+        alert("Unable to retrieve your location.");
+      }
+    );
+  };
+
+  const uploadFileToStorage = async (file) => {
     if (!file) return null;
     const timestamp = Date.now();
     const random = Math.random().toString(36).slice(2, 8);
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const filePath = `${timestamp}-${random}-${safeName}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, file, { cacheControl: "3600", upsert: false });
 
-    if (error) {
-      throw new Error(`Upload failed: ${error.message}`);
-    }
-    const { data: publicUrlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
-    if (!publicUrlData?.publicUrl) throw new Error("Failed to get public URL");
-    return publicUrlData.publicUrl;
+    if (error) throw new Error(`Upload failed: ${error.message}`);
+    
+    const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+    return data.publicUrl;
   };
 
   const resetForm = () => {
@@ -121,226 +168,290 @@ const Inventory = () => {
     });
     setReceiptFile(null);
     setPhotoFiles([]);
-    const r = document.getElementById("receiptInput");
-    const p = document.getElementById("photosInput");
-    if (r) r.value = "";
-    if (p) p.value = "";
-  };
-
-  const validatePhone = (phone) => {
-    if (!phone) return true;
-    return /^\d{10}$/.test(phone);
+    setPhotoPreviews([]);
+    if (receiptInputRef.current) receiptInputRef.current.value = "";
+    if (photosInputRef.current) photosInputRef.current.value = "";
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+    setStatus({ type: "", msg: "" });
 
     try {
-      // Basic validation
-      if (!form.material_name || !form.material_name.trim()) throw new Error("Material name is required.");
-      if (!form.quantity || Number(form.quantity) <= 0) throw new Error("Quantity must be a positive number.");
-      if (!form.unit || !form.unit.trim()) throw new Error("Unit is required.");
-      if (!validatePhone(form.contact_phone)) throw new Error("Contact phone must be 10 digits when provided.");
+      // Validation
+      if (!form.material_name.trim()) throw new Error("Material name is required.");
+      if (!form.quantity || Number(form.quantity) <= 0) throw new Error("Quantity must be positive.");
+      if (!form.unit.trim()) throw new Error("Unit is required.");
 
-      // Ensure authenticated user
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.warn("getUser error:", userError);
-      }
-      const currentUserId = userData?.user?.id ?? null;
-      if (!currentUserId) {
-        throw new Error("You must be signed in to add inventory. Please log in and try again.");
-      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) throw new Error("You must be signed in.");
 
-      // Upload files
+      // Uploads
       let receiptUrl = null;
-      if (receiptFile) receiptUrl = await uploadFileToStorage(receiptFile, true);
+      if (receiptFile) receiptUrl = await uploadFileToStorage(receiptFile);
 
       let photoUrls = [];
-      if (photoFiles?.length > 0) {
-        const arr = await Promise.all(photoFiles.map((f) => uploadFileToStorage(f, false)));
-        photoUrls = arr.filter(Boolean);
+      if (photoFiles.length > 0) {
+        photoUrls = await Promise.all(photoFiles.map((f) => uploadFileToStorage(f)));
       }
 
-      // Build payload
+      // Payload
       const payload = {
-        movement_type: form.movement_type || "IN",
-        transaction_date: form.transaction_date ? new Date(form.transaction_date).toISOString() : new Date().toISOString(),
-        material_name: form.material_name.trim(),
-        size_spec: form.size_spec ? form.size_spec.trim() : null,
+        ...form,
         quantity: Number(form.quantity),
-        unit: form.unit ? form.unit.trim() : null,
-        issuer_dispatcher: form.issuer_dispatcher ? form.issuer_dispatcher.trim() : null,
-        vehicle_number: form.vehicle_number ? form.vehicle_number.trim() : null,
-        driver_name: form.driver_name ? form.driver_name.trim() : null,
-        source_location: form.source_location ? form.source_location.trim() : null,
-        destination_location: form.destination_location ? form.destination_location.trim() : null,
-        stock_location: form.stock_location ? form.stock_location.trim() : null,
-        contact_person: form.contact_person ? form.contact_person.trim() : null,
-        contact_phone: form.contact_phone ? form.contact_phone.trim() : null,
-        remarks: form.remarks ? form.remarks.trim() : null,
-        purchase_price: form.purchase_price !== "" ? Number(form.purchase_price) : null,
+        purchase_price: form.purchase_price ? Number(form.purchase_price) : null,
+        transaction_date: form.transaction_date ? new Date(form.transaction_date).toISOString() : new Date().toISOString(),
         receipt_url: receiptUrl,
-        photo_urls: photoUrls.length > 0 ? photoUrls : null,
-        created_by: currentUserId, // mandatory owner field (must match RLS)
+        photo_urls: photoUrls.length ? photoUrls : null,
+        created_by: userData.user.id,
       };
 
-      // Insert
-      const { data: insertData, error: insertError } = await supabase
-        .from("inventory_logs")
-        .insert([payload])
-        .select();
+      const { error } = await supabase.from("inventory_logs").insert([payload]);
 
-      if (insertError) {
-        console.error("Insert error:", insertError);
-        // helpful message for common mistakes
-        if (insertError.code === "42P01" || (insertError.message && insertError.message.includes("relation"))) {
-          throw new Error('Database table "inventory_logs" not found. Run the SQL migration in Supabase SQL editor.');
-        }
-        throw new Error(insertError.message || "Failed to insert inventory log");
-      }
+      if (error) throw error;
 
-      setSuccessMsg(`Inventory saved ✓ (ID: ${insertData?.[0]?.id || "saved"})`);
+      setStatus({ type: "success", msg: "Inventory Record Saved Successfully!" });
       resetForm();
+      window.scrollTo(0, 0);
     } catch (err) {
-      console.error("Submit error:", err);
-      setErrorMsg(err?.message || "Failed to save inventory. Check console.");
+      console.error(err);
+      setStatus({ type: "error", msg: err.message || "Failed to save inventory." });
     } finally {
       setLoading(false);
     }
   };
 
+  // --- UI Components ---
+  const SectionHeader = ({ icon: Icon, title }) => (
+    <div className="flex items-center gap-2 mb-4 border-b pb-2 text-slate-700">
+      <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600">
+        <Icon size={18} />
+      </div>
+      <h3 className="font-semibold text-lg">{title}</h3>
+    </div>
+  );
+
+  const InputField = ({ label, icon: Icon, ...props }) => (
+    <div className="w-full">
+      <label className="block text-sm font-medium text-slate-600 mb-1.5 ml-1">{label}</label>
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
+          <Icon size={16} />
+        </div>
+        <input 
+          {...props} 
+          className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 flex justify-center py-8 px-4">
-      <div className="w-full max-w-5xl bg-white shadow-sm rounded-lg p-6">
-        <div className="mb-6 border-b pb-3 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50 py-8 px-4 md:px-6 font-sans">
+      <div className="max-w-4xl mx-auto">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-xl md:text-2xl font-semibold text-gray-800">Inventory – Add Stock Movement</h1>
-            <p className="text-xs md:text-sm text-gray-500 mt-1">Log incoming (IN) or outgoing (OUT) stock with details.</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-800">Inventory Management</h1>
+            <p className="text-slate-500 mt-1">Record incoming and outgoing stock movements.</p>
           </div>
-          <Link to="/inventory-list" className="text-xs md:text-sm text-blue-600 hover:underline">← View Inventory History</Link>
+          <Link 
+            to="/inventory-list" 
+            className="flex items-center justify-center gap-2 bg-white text-slate-600 px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-blue-600 transition shadow-sm font-medium text-sm"
+          >
+            <ArrowLeft size={16} /> View History
+          </Link>
         </div>
 
-        <div className="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
-          <strong>Setup:</strong> Create Storage bucket <code>{BUCKET_NAME}</code> and run DB migration SQL. See README.
-        </div>
+        {/* Status Messages */}
+        {status.msg && (
+          <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 shadow-sm border ${status.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+            {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+            <span className="font-medium text-sm">{status.msg}</span>
+          </div>
+        )}
 
-        {successMsg && <div className="mb-4 text-sm text-green-700 bg-green-100 border border-green-200 rounded-md px-3 py-2">{successMsg}</div>}
-        {errorMsg && <div className="mb-4 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md px-3 py-2">{errorMsg}</div>}
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden relative">
+          
+          {/* Loading Overlay */}
+          {loading && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-slate-600 font-medium">Processing...</p>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* form fields (same as original) */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type</label>
-              <select name="movement_type" value={form.movement_type} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm">
-                <option value="IN">IN (Add Stocks)</option>
-                <option value="OUT">OUT (Release Stocks)</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date Add / Release Stocks</label>
-              <input type="datetime-local" name="transaction_date" value={form.transaction_date} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">Leave empty to use current server time.</p>
-            </div>
+          <div className="p-6 md:p-8 space-y-8">
+            
+            {/* 1. Movement Details */}
+            <section>
+              <SectionHeader icon={Package} title="Movement Details" />
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                   <label className="block text-sm font-medium text-slate-600 mb-1.5 ml-1">Movement Type</label>
+                   <div className="relative">
+                      <Layers className="absolute left-3 top-3 text-slate-400" size={16} />
+                      <select 
+                        name="movement_type" 
+                        value={form.movement_type} 
+                        onChange={handleChange}
+                        className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none"
+                      >
+                        <option value="IN">IN (Add Stock)</option>
+                        <option value="OUT">OUT (Release Stock)</option>
+                      </select>
+                   </div>
+                </div>
+                <InputField type="datetime-local" label="Date & Time" name="transaction_date" value={form.transaction_date} onChange={handleChange} icon={Calendar} />
+                
+                <div className="md:col-span-2 grid md:grid-cols-3 gap-6">
+                  <div className="md:col-span-2">
+                    <InputField type="text" label="Material Name" name="material_name" value={form.material_name} onChange={handleChange} icon={Package} placeholder="e.g. Cement, Steel Rods" required />
+                  </div>
+                  <InputField type="text" label="Size / Spec" name="size_spec" value={form.size_spec} onChange={handleChange} icon={Info} placeholder="e.g. 50kg bag" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <InputField type="number" label="Quantity" name="quantity" value={form.quantity} onChange={handleChange} icon={Layers} placeholder="0.00" step="0.01" required />
+                  <InputField type="text" label="Unit" name="unit" value={form.unit} onChange={handleChange} icon={Info} placeholder="kg, pcs, bags" required />
+                </div>
+                
+                <InputField type="number" label="Total Value (Price)" name="purchase_price" value={form.purchase_price} onChange={handleChange} icon={DollarSign} placeholder="0.00" step="0.01" />
+              </div>
+            </section>
+
+            {/* 2. Logistics */}
+            <section>
+              <SectionHeader icon={Truck} title="Logistics & Location" />
+              <div className="grid md:grid-cols-2 gap-6">
+                <InputField type="text" label="Issuer / Dispatcher" name="issuer_dispatcher" value={form.issuer_dispatcher} onChange={handleChange} icon={User} />
+                <InputField type="text" label="Vehicle Number" name="vehicle_number" value={form.vehicle_number} onChange={handleChange} icon={Truck} placeholder="MH-XX-0000" />
+                
+                <div className="md:col-span-2">
+                   <InputField type="text" label="Driver's Name" name="driver_name" value={form.driver_name} onChange={handleChange} icon={User} />
+                </div>
+
+                {/* Location with Geo-button */}
+                <div className="md:col-span-2 grid md:grid-cols-3 gap-6">
+                  <div className="relative">
+                     <InputField type="text" label="Source (From)" name="source_location" value={form.source_location} onChange={handleChange} icon={MapPin} />
+                     <button type="button" onClick={() => handleGetLocation('source_location')} className="absolute right-2 top-[30px] p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Use Current Location">
+                        <Map size={16} />
+                     </button>
+                  </div>
+                  <div className="relative">
+                     <InputField type="text" label="Destination (To)" name="destination_location" value={form.destination_location} onChange={handleChange} icon={MapPin} />
+                     <button type="button" onClick={() => handleGetLocation('destination_location')} className="absolute right-2 top-[30px] p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Use Current Location">
+                        <Map size={16} />
+                     </button>
+                  </div>
+                  <InputField type="text" label="Stock Location (Warehouse)" name="stock_location" value={form.stock_location} onChange={handleChange} icon={MapPin} />
+                </div>
+              </div>
+            </section>
+
+            {/* 3. Contact & Remarks */}
+            <section>
+              <SectionHeader icon={User} title="Contact & Remarks" />
+              <div className="grid md:grid-cols-2 gap-6">
+                 <InputField type="text" label="Contact Person" name="contact_person" value={form.contact_person} onChange={handleChange} icon={User} />
+                 <InputField type="tel" label="Phone Number" name="contact_phone" value={form.contact_phone} onChange={handleChange} icon={Phone} placeholder="10-digit mobile" maxLength={10} />
+                 
+                 <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-600 mb-1.5 ml-1">Remarks</label>
+                    <textarea 
+                      name="remarks" 
+                      rows={3} 
+                      value={form.remarks} 
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                      placeholder="Any additional notes..."
+                    />
+                 </div>
+              </div>
+            </section>
+
+            {/* 4. Files */}
+            <section>
+              <SectionHeader icon={UploadCloud} title="Attachments" />
+              <div className="grid md:grid-cols-2 gap-6">
+                
+                {/* Receipt Upload */}
+                <div>
+                   <label className="block text-sm font-medium text-slate-600 mb-2">Receipt (PDF/Image)</label>
+                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50 hover:bg-slate-100 hover:border-blue-300 transition-colors text-center relative">
+                      <input 
+                        ref={receiptInputRef}
+                        type="file" 
+                        accept="image/*,.pdf" 
+                        onChange={handleReceiptChange} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                         <div className="p-2 bg-white rounded-full shadow-sm">
+                            <FileText size={20} className="text-blue-500"/>
+                         </div>
+                         <span className="text-sm text-slate-500">{receiptFile ? receiptFile.name : "Click or Drag to Upload"}</span>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Photos Upload */}
+                <div>
+                   <label className="block text-sm font-medium text-slate-600 mb-2">Photos (Evidence)</label>
+                   <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50 hover:bg-slate-100 hover:border-blue-300 transition-colors text-center relative">
+                      <input 
+                        ref={photosInputRef}
+                        type="file" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={handlePhotosChange} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                         <div className="p-2 bg-white rounded-full shadow-sm">
+                            <UploadCloud size={20} className="text-purple-500"/>
+                         </div>
+                         <span className="text-sm text-slate-500">{photoFiles.length > 0 ? `${photoFiles.length} files selected` : "Upload Site Photos"}</span>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              {/* Photo Previews */}
+              {photoPreviews.length > 0 && (
+                <div className="mt-4 flex gap-3 overflow-x-auto py-2">
+                  {photoPreviews.map((src, i) => (
+                    <div key={i} className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                       <img src={src} alt="preview" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Material</label>
-              <input type="text" name="material_name" value={form.material_name} onChange={handleChange} required className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. Cement Bag" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-              <input type="text" name="size_spec" value={form.size_spec} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. 50kg" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-              <input type="number" name="quantity" value={form.quantity} onChange={handleChange} required min="0" step="0.01" className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. 100" />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-              <input type="text" name="unit" value={form.unit} onChange={handleChange} required className="w-full border rounded-md px-3 py-2 text-sm" placeholder="e.g. kg" />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Issuer / Dispatcher</label>
-              <input type="text" name="issuer_dispatcher" value={form.issuer_dispatcher} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Number</label>
-              <input type="text" name="vehicle_number" value={form.vehicle_number} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Driver's Name</label>
-              <input type="text" name="driver_name" value={form.driver_name} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Source (From)</label>
-              <input type="text" name="source_location" value={form.source_location} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Destination (To)</label>
-              <input type="text" name="destination_location" value={form.destination_location} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stock Material Location</label>
-              <input type="text" name="stock_location" value={form.stock_location} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
-              <input type="text" name="contact_person" value={form.contact_person} onChange={handleChange} className="w-full border rounded-md px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone (10 digits)</label>
-              <input type="tel" name="contact_phone" value={form.contact_phone} onChange={handleChange} maxLength={10} inputMode="numeric" pattern="\d{10}" className="w-full border rounded-md px-3 py-2 text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">Leave empty if not available. 10 digits required if provided.</p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Price (Total)</label>
-            <input type="number" name="purchase_price" value={form.purchase_price} onChange={handleChange} min="0" step="0.01" className="w-full border rounded-md px-3 py-2 text-sm" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-            <textarea name="remarks" value={form.remarks} onChange={handleChange} rows={3} className="w-full border rounded-md px-3 py-2 text-sm" />
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Corresponding Receipt (PDF/Image)</label>
-              <input id="receiptInput" type="file" accept="image/*,.pdf" onChange={handleReceiptChange} className="w-full text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">This file will be uploaded to Supabase Storage.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Photos (Multiple allowed)</label>
-              <input id="photosInput" type="file" accept="image/*" multiple onChange={handlePhotosChange} className="w-full text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">All selected photos will be uploaded and stored.</p>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <button type="button" disabled={loading} onClick={resetForm} className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Reset</button>
-            <button type="submit" disabled={loading} className="px-5 py-2 text-sm rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-60">
-              {loading ? "Saving..." : "Save Inventory Log"}
+          {/* Footer Actions */}
+          <div className="bg-slate-50 p-6 flex flex-col-reverse md:flex-row justify-end gap-3 border-t border-slate-100">
+            <button 
+              type="button" 
+              onClick={resetForm} 
+              className="px-6 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium hover:bg-white hover:text-slate-800 transition"
+            >
+              Reset Form
+            </button>
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="px-8 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              <Save size={18} />
+              {loading ? "Saving..." : "Save Record"}
             </button>
           </div>
+
         </form>
       </div>
     </div>

@@ -21,12 +21,11 @@ import {
   Globe
 } from 'lucide-react';
 
-
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <nav className="w-full py-5 px-6 md:px-12 flex justify-between items-center z-50 relative bg-slate-950/80 backdrop-blur-md sticky top-0 border-b border-white/5">
+    <nav className="w-full py-5 px-6 md:px-12 flex justify-between items-center z-50 bg-slate-950/80 backdrop-blur-md sticky top-0 border-b border-white/5">
       <div className="flex items-center gap-2">
         <div className="bg-emerald-500 p-1.5 rounded-md">
            <Database className="text-white w-5 h-5" />
@@ -44,23 +43,41 @@ const Navbar = () => {
       </div>
 
       <div className="hidden md:flex items-center gap-4">
-        <Link to="/login" className="text-white text-sm font-medium hover:text-emerald-400 transition">Login</Link>
+        {/* Login Button */}
+        <Link to="/login" className="text-white text-sm font-medium hover:text-emerald-400 transition">
+          Login
+        </Link>
+        {/* Desktop Get Started Button */}
+        <Link 
+          to="/login" 
+          className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-full font-semibold text-sm transition shadow-lg shadow-emerald-500/20"
+        >
+          Get Started
+        </Link>
       </div>
 
       {/* Mobile Menu Toggle */}
-      <button className="md:hidden text-white" onClick={() => setIsOpen(!isOpen)}>
+      <button className="md:hidden text-white focus:outline-none" onClick={() => setIsOpen(!isOpen)}>
         {isOpen ? <X /> : <Menu />}
       </button>
 
       {/* Mobile Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 w-full bg-slate-900 border-b border-slate-800 p-4 flex flex-col gap-4 md:hidden">
-            <a href="#features" className="text-slate-300 hover:text-emerald-400">Features</a>
-            <a href="#datastore" className="text-slate-300 hover:text-emerald-400">Data Store</a>
-            <a href="#howitworks" className="text-slate-300 hover:text-emerald-400">How It Works</a>
-            <a href="#pricing" className="text-slate-300 hover:text-emerald-400">Pricing</a>
+        <div className="absolute top-full left-0 w-full bg-slate-900 border-b border-slate-800 p-6 flex flex-col gap-4 md:hidden shadow-2xl animate-in slide-in-from-top-5 duration-200">
+            <a href="#features" className="text-slate-300 hover:text-emerald-400" onClick={() => setIsOpen(false)}>Features</a>
+            <a href="#datastore" className="text-slate-300 hover:text-emerald-400" onClick={() => setIsOpen(false)}>Data Store</a>
+            <a href="#howitworks" className="text-slate-300 hover:text-emerald-400" onClick={() => setIsOpen(false)}>How It Works</a>
+            <a href="#pricing" className="text-slate-300 hover:text-emerald-400" onClick={() => setIsOpen(false)}>Pricing</a>
             <Link to="/login" className="text-white font-medium text-left" onClick={() => setIsOpen(false)}>Login</Link>
-            <button className="bg-emerald-500 text-white px-5 py-2 rounded-full font-semibold">Get Started</button>
+            
+            {/* Mobile Get Started Button */}
+            <Link 
+              to="/login" 
+              className="bg-emerald-500 text-white px-5 py-3 rounded-full font-semibold text-center hover:bg-emerald-600 transition"
+              onClick={() => setIsOpen(false)}
+            >
+              Get Started
+            </Link>
         </div>
       )}
     </nav>
@@ -88,33 +105,40 @@ const Hero = () => {
         </span>
       </h1>
 
-      <p className="text-slate-400 text-lg max-w-2xl mb-10">
+      <p className="text-slate-400 text-lg max-w-2xl mb-10 leading-relaxed">
         Track, store, monitor and receive real-time government tenders effortlessly in one powerful dashboard.
       </p>
 
       {/* CTA Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-20">
-        <button className="flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-full font-semibold hover:bg-emerald-50 transition shadow-lg shadow-emerald-900/20">
+      <div className="flex flex-col sm:flex-row gap-4 mb-20 w-full sm:w-auto px-6">
+        {/* Main Hero Get Started Button pointing to Login */}
+        <Link 
+          to="/login" 
+          className="flex items-center justify-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-full font-semibold hover:bg-emerald-50 transition shadow-lg shadow-emerald-900/20"
+        >
           Get Started <ArrowRight className="w-4 h-4" />
-        </button>
+        </Link>
+        
         <button className="flex items-center justify-center gap-2 bg-slate-800 text-white border border-slate-700 px-8 py-3.5 rounded-full font-semibold hover:bg-slate-700 transition">
           View Live Tenders <PlayCircle className="w-4 h-4" />
         </button>
       </div>
 
       {/* Stats Strip */}
-      <div className="grid grid-cols-3 gap-12 md:gap-24 border-t border-slate-800 pt-8">
-        <div>
-          <h3 className="text-2xl md:text-3xl font-bold text-white">10K+</h3>
-          <p className="text-slate-500 text-sm">Active Tenders</p>
-        </div>
-        <div>
-          <h3 className="text-2xl md:text-3xl font-bold text-white">99.9%</h3>
-          <p className="text-slate-500 text-sm">Uptime</p>
-        </div>
-        <div>
-          <h3 className="text-2xl md:text-3xl font-bold text-white">24/7</h3>
-          <p className="text-slate-500 text-sm">Monitoring</p>
+      <div className="w-full max-w-5xl px-4">
+        <div className="grid grid-cols-3 gap-4 md:gap-24 border-t border-slate-800 pt-8">
+          <div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white">10K+</h3>
+            <p className="text-slate-500 text-xs md:text-sm">Active Tenders</p>
+          </div>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white">99.9%</h3>
+            <p className="text-slate-500 text-xs md:text-sm">Uptime</p>
+          </div>
+          <div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white">24/7</h3>
+            <p className="text-slate-500 text-xs md:text-sm">Monitoring</p>
+          </div>
         </div>
       </div>
     </div>
@@ -122,7 +146,7 @@ const Hero = () => {
 };
 
 const FeatureCard = ({ icon: Icon, title, desc, color }) => (
-  <div className="bg-slate-800/50 border border-slate-700/50 p-6 rounded-2xl hover:bg-slate-800 transition duration-300 group hover:border-emerald-500/30">
+  <div className="bg-slate-800/50 border border-slate-700/50 p-6 rounded-2xl hover:bg-slate-800 transition duration-300 group hover:border-emerald-500/30 h-full">
     <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${color}`}>
       <Icon className="text-white w-6 h-6" />
     </div>
@@ -156,7 +180,7 @@ const Features = () => {
 
 const DataStorePreview = () => {
   return (
-    <div className="py-20 px-6 md:px-12 bg-slate-900/50" id="datastore">
+    <div className="py-20 px-4 md:px-12 bg-slate-900/50" id="datastore">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">Tender Data Store</h2>
@@ -166,8 +190,8 @@ const DataStorePreview = () => {
         {/* Dashboard UI Mockup */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-2xl">
           {/* Filters Bar */}
-          <div className="p-4 border-b border-slate-700 flex flex-col md:flex-row gap-4 justify-between items-end">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full md:w-3/4">
+          <div className="p-4 border-b border-slate-700 flex flex-col lg:flex-row gap-4 justify-between items-end">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full lg:w-3/4">
               <div>
                 <label className="text-xs text-slate-400 block mb-1">District</label>
                 <div className="bg-slate-900 border border-slate-700 rounded p-2 text-slate-300 text-sm flex justify-between items-center cursor-pointer hover:border-slate-500 transition">
@@ -186,13 +210,13 @@ const DataStorePreview = () => {
                 </div>
               </div>
             </div>
-            <button className="bg-gradient-to-r from-blue-500 to-emerald-500 text-white px-4 py-2 rounded text-sm font-medium flex items-center gap-2 hover:opacity-90 transition w-full md:w-auto justify-center">
+            <button className="bg-gradient-to-r from-blue-500 to-emerald-500 text-white px-4 py-2 rounded text-sm font-medium flex items-center gap-2 hover:opacity-90 transition w-full lg:w-auto justify-center">
               <Filter size={14} /> Apply Filters
             </button>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
+          {/* Table Container - Scrollable on mobile */}
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-sm text-left min-w-[800px]">
               <thead className="text-xs text-slate-400 bg-slate-900/50 uppercase">
                 <tr>
@@ -355,10 +379,13 @@ const CTA = () => {
       <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Ready to Transform Your Tender <br/> Management?</h2>
       <p className="text-blue-50 text-lg mb-8">Join hundreds of contractors and businesses already using Osaioriginal</p>
       <div className="flex flex-col sm:flex-row justify-center gap-4">
-        <button className="bg-white text-blue-600 px-8 py-3 rounded-md font-bold hover:bg-blue-50 transition shadow-lg">
+        <Link 
+          to="/login"
+          className="bg-white text-blue-600 px-8 py-3 rounded-md font-bold hover:bg-blue-50 transition shadow-lg flex items-center justify-center"
+        >
           Start Free Trial <ArrowRight className="inline w-4 h-4 ml-1" />
-        </button>
-        <button className="bg-white/20 text-white border border-white/40 px-8 py-3 rounded-md font-bold hover:bg-white/30 transition backdrop-blur-sm">
+        </Link>
+        <button className="bg-white/20 text-white border border-white/40 px-8 py-3 rounded-md font-bold hover:bg-white/30 transition backdrop-blur-sm flex items-center justify-center">
           Schedule Demo <Database className="inline w-4 h-4 ml-1" />
         </button>
       </div>
